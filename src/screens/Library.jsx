@@ -11,10 +11,10 @@ import ScreenHead from "../components/ScreenHead";
 //   [3] [4] [5=empty]
 
 const BASE_GAMES = [
-  { name: "SNAKE",   tag: "1P", hi: null }, // filled from localStorage
-  { name: "FLAPPY",  tag: "1P", hi: null }, // filled from localStorage
-  { name: "MEMORY",  tag: "1P", hi: null }, // filled from localStorage
-  { name: "TIC-TAC", tag: "2P", hi: "---" },
+  { name: "SNAKE",      tag: "1P", hi: null },  // filled from localStorage
+  { name: "FLAPPY",     tag: "1P", hi: null },  // filled from localStorage
+  { name: "MEMORY",     tag: "1P", hi: null },  // filled from localStorage
+  { name: "BATTLESHIP", tag: "2P", hi: "---" }, // local 2P, WS_WIRE for online
 ];
 const COLS = 3;
 const VALID = 5; // indices 0-4 are valid games
