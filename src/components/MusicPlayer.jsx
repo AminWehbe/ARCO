@@ -1,8 +1,8 @@
 import { useRef } from "react";
 import { useApp } from "../context/AppContext";
 
-const TRACKS = ["8BIT", "ARCADE"];
-const LABELS  = { "8BIT": "8-BIT TUNE", "ARCADE": "ARCADE FUN" };
+const TRACKS = ["8BIT", "ARCADE", "CELL THEME"];
+const LABELS  = { "8BIT": "8-BIT TUNE", "ARCADE": "ARCADE FUN", "CELL THEME": "CELL THEME" };
 
 // Persistent mini music player shown in the header on every screen.
 export default function MusicPlayer() {

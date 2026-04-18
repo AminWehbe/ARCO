@@ -3,6 +3,7 @@ import { useEffect, useRef } from "react";
 const TRACKS = {
   "8BIT":   "/music/track_8bit.mp3",
   "ARCADE": "/music/track_arcade.mp3",
+  "CELL THEME": "/music/track_perfectcell.mp3",
 };
 
 // Manages a looping background audio track. Tries immediately; retries on first gesture if blocked.

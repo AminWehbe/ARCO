@@ -7,8 +7,8 @@ import ScreenHead from "../components/ScreenHead";
 
 // AWS_WIRE: PATCH /users/{userId} to persist displayName — call updateProfile() from api/client.js
 
-const MUSIC_OPTIONS = ["8BIT", "ARCADE", "OFF"];
-const MUSIC_LABELS  = { "8BIT": "8-BIT TUNE", "ARCADE": "ARCADE FUN", "OFF": "OFF" };
+const MUSIC_OPTIONS = ["8BIT", "ARCADE", "CELL THEME", "OFF"];
+const MUSIC_LABELS  = { "8BIT": "8-BIT TUNE", "ARCADE": "ARCADE FUN", "CELL THEME": "CELL THEME", "OFF": "OFF" };
 
 export default function Settings() {
   const { tweaks, setTweaks, navigate, signOut } = useApp();
