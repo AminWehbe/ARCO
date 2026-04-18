@@ -5,8 +5,8 @@ const W = 360;
 const H = 560;
 
 // Physics (ported from BirdScript.cs)
-const GRAVITY       = 1200; // px/s² — replaces Rigidbody2D gravityScale
-const FLAP_STRENGTH = -380; // px/s upward — replaces flapStrength
+const GRAVITY       = 900; // px/s² — replaces Rigidbody2D gravityScale
+const FLAP_STRENGTH = -300; // px/s upward — replaces flapStrength
 
 // Pipes (ported from PipeMoveScript + PipeSpawnerScript)
 const PIPE_W         = 55;
