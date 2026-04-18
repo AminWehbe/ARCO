@@ -11,10 +11,10 @@ import ScreenHead from "../components/ScreenHead";
 //   [3] [4] [5=empty]
 
 const BASE_GAMES = [
-  { name: "SNAKE",   tag: "1P",   hi: null }, // hi filled dynamically from localStorage
-  { name: "FLAPPY",  tag: "1P",   hi: "214" },
-  { name: "MEMORY",  tag: "1P",   hi: "00:42" },
-  { name: "TIC-TAC", tag: "2P",   hi: "12-3" },
+  { name: "SNAKE",   tag: "1P", hi: null }, // filled from localStorage
+  { name: "FLAPPY",  tag: "1P", hi: null }, // filled from localStorage
+  { name: "MEMORY",  tag: "1P", hi: null }, // filled from localStorage
+  { name: "TIC-TAC", tag: "2P", hi: "---" },
 ];
 const COLS = 3;
 const VALID = 5; // indices 0-4 are valid games
@@ -22,16 +22,25 @@ const VALID = 5; // indices 0-4 are valid games
 export default function Library() {
   const { tweaks, navigate, launchGame } = useApp();
   const [selected, setSelected] = useState(0);
-  const [snakeHi, setSnakeHi] = useState(() => parseInt(localStorage.getItem("arco_snake_hi") || "0"));
+  const getHi = key => parseInt(localStorage.getItem(key) || "0");
+  const fmtHi = n => n > 0 ? n.toLocaleString() : "---";
 
-  // Refresh snake hi-score each time Library mounts (e.g. returning from InGame)
+  const [snakeHi,  setSnakeHi]  = useState(() => getHi("arco_snake_hi"));
+  const [flappyHi, setFlappyHi] = useState(() => getHi("arco_flappy_hi"));
+  const [memoryHi, setMemoryHi] = useState(() => getHi("arco_memory_hi"));
+
+  // Refresh all hi-scores each time Library mounts (returning from InGame)
   useEffect(() => {
-    setSnakeHi(parseInt(localStorage.getItem("arco_snake_hi") || "0"));
+    setSnakeHi(getHi("arco_snake_hi"));
+    setFlappyHi(getHi("arco_flappy_hi"));
+    setMemoryHi(getHi("arco_memory_hi"));
   }, []);
 
   const games = [
-    { ...BASE_GAMES[0], hi: snakeHi > 0 ? snakeHi.toLocaleString() : "---" },
-    ...BASE_GAMES.slice(1),
+    { ...BASE_GAMES[0], hi: fmtHi(snakeHi) },
+    { ...BASE_GAMES[1], hi: fmtHi(flappyHi) },
+    { ...BASE_GAMES[2], hi: fmtHi(memoryHi) },
+    ...BASE_GAMES.slice(3),
     { name: tweaks.g5, tag: "2P", hi: "21-14" },
   ];
   const current = games[selected];

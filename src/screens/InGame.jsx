@@ -6,6 +6,7 @@ import Bezel from "../components/Bezel";
 import ScreenHead from "../components/ScreenHead";
 import SnakeGame   from "../games/snake/SnakeGame";
 import MemoryGame  from "../games/memory/MemoryGame";
+import FlappyGame  from "../games/flappy/FlappyGame";
 import GamePlaceholder from "../components/GamePlaceholder";
 
 // AWS_WIRE: replace console.log with submitScore(activeGame, score) from api/client.js
@@ -20,6 +21,7 @@ const GAME_META = {
 function GameSwitch({ name, onGameOver }) {
   if (name === "SNAKE")  return <SnakeGame  onGameOver={onGameOver} />;
   if (name === "MEMORY") return <MemoryGame onGameOver={onGameOver} />;
+  if (name === "FLAPPY") return <FlappyGame onGameOver={onGameOver} />;
   return <GamePlaceholder name={name} />;
 }
 
@@ -63,7 +65,9 @@ export default function InGame() {
             <div className="row" style={{ gap: 4 }}>
               {activeGame === "SNAKE"
                 ? <><span className="kbd">↑↓←→</span><span className="muted">move</span></>
-                : <><span className="kbd">CLICK</span><span className="muted">flip</span></>
+                : activeGame === "FLAPPY"
+                  ? <><span className="kbd">SPACE</span><span className="muted">flap</span></>
+                  : <><span className="kbd">CLICK</span><span className="muted">flip</span></>
               }
               <span className="kbd">Q</span><span className="muted">quit</span>
             </div>

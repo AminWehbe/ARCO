@@ -37,8 +37,14 @@ export default function MemoryGame({ onGameOver }) {
     return () => clearInterval(timerRef.current);
   }, [started, done]);
 
+  const hiScore = parseInt(localStorage.getItem("arco_memory_hi") || "0");
+
   function calcScore(moves, seconds) {
     return Math.max(0, 1000 - moves * 15 - seconds * 2);
+  }
+
+  function saveHiScore(score) {
+    if (score > hiScore) localStorage.setItem("arco_memory_hi", score);
   }
 
   function reset() {
@@ -76,6 +82,7 @@ export default function MemoryGame({ onGameOver }) {
         if (matched.every(c => c.matched)) {
           setDone(true);
           const score = calcScore(moves + 1, seconds);
+          saveHiScore(score);
           onGameOver?.(score);
         }
       } else {
@@ -111,6 +118,12 @@ export default function MemoryGame({ onGameOver }) {
           <div className="label">PAIRS</div>
           <div className="pixel" style={{ fontSize: 18, color: "#fff" }}>
             {cards.filter(c => c.matched).length / 2} / {SYMBOLS.length}
+          </div>
+        </div>
+        <div className="col" style={{ alignItems: "center", gap: 2 }}>
+          <div className="label">BEST</div>
+          <div className="pixel" style={{ fontSize: 18, color: "var(--pink)" }}>
+            {hiScore > 0 ? hiScore : "---"}
           </div>
         </div>
       </div>
