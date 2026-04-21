@@ -35,7 +35,14 @@ export default function Profile() {
 
   // Derive display values from real data, falling back to placeholders
   const gamesPlayed = userData?.gamesPlayed ?? 0;
-  const level       = Math.floor(gamesPlayed / 5) + 1;
+
+  // Triangular level progression: level N requires N games to complete
+  // Total games to reach level N = N*(N-1)/2
+  const level          = Math.floor((1 + Math.sqrt(1 + 8 * gamesPlayed)) / 2);
+  const gamesAtLevel   = (level * (level - 1)) / 2;   // games played at start of current level
+  const gamesIntoLevel = gamesPlayed - gamesAtLevel;   // progress into current level
+  const gamesNeeded    = level;                         // games required to complete this level
+  const levelProgress  = gamesNeeded > 0 ? gamesIntoLevel / gamesNeeded : 0;
 
   // Build per-game rows: [label, scoreStr, barFraction]
   // Backend stores flat attrs: best_snake, best_flappy, best_memory, best_battleship
@@ -66,6 +73,15 @@ export default function Profile() {
                 <div style={{ marginTop: 4 }}>
                   <span className="pill accent">LVL {String(level).padStart(2, "0")}</span>&nbsp;
                   <span className="pill">{level < 5 ? "BRONZE" : level < 15 ? "SILVER" : "GOLD"}</span>
+                </div>
+                {/* Level progress bar */}
+                <div style={{ marginTop: 8, width: "100%" }}>
+                  <div className="bar" style={{ width: "100%" }}>
+                    <span style={{ width: `${levelProgress * 100}%` }} />
+                  </div>
+                  <div className="muted" style={{ fontSize: 11, marginTop: 3 }}>
+                    {gamesIntoLevel}/{gamesNeeded} games → LVL {String(level + 1).padStart(2, "0")}
+                  </div>
                 </div>
               </div>
             </div>

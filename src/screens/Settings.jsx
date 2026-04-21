@@ -11,22 +11,18 @@ const MUSIC_OPTIONS = ["8BIT", "ARCADE", "CELL THEME", "OFF"];
 const MUSIC_LABELS  = { "8BIT": "8-BIT TUNE", "ARCADE": "ARCADE FUN", "CELL THEME": "CELL THEME", "OFF": "OFF" };
 
 export default function Settings() {
-  const { tweaks, setTweaks, navigate, signOut } = useApp();
+  const { tweaks, setTweaks, navigate, signOut, user } = useApp();
   const [sound,  setSound]  = useState("ON");
-  const [diff,   setDiff]   = useState("NORMAL");
-  const [motion, setMotion] = useState("OFF");
   const [cursor, setCursor] = useState(0);
 
   // Flat list of interactive items (sections are skipped in the handler)
   const items = [
-    { label: "DISPLAY NAME",  value: "pixelwyrm",                  action: null },
-    { label: "EMAIL",         value: "add email to sync",           action: null },
+    { label: "DISPLAY NAME",  value: user?.displayName ?? "—",      action: null },
+    { label: "EMAIL",         value: user?.email       ?? "—",      action: null },
     { label: "SIGN OUT",      value: "▸",                           action: signOut },
     { label: "MUSIC",         value: `◂  ${MUSIC_LABELS[tweaks.music]}  ▸`, toggle: () => setTweaks({ music: MUSIC_OPTIONS[(MUSIC_OPTIONS.indexOf(tweaks.music) + 1) % MUSIC_OPTIONS.length] }) },
     { label: "SOUND",         value: `◂  ${sound}  ▸`,             toggle: () => setSound(s => s === "ON" ? "OFF" : "ON") },
-    { label: "DIFFICULTY",    value: `◂ ${diff} ▸`,                toggle: () => setDiff(d => d === "NORMAL" ? "HARD" : "NORMAL") },
     { label: "CRT SCANLINES", value: `◂  ${tweaks.scan.toUpperCase()}  ▸`, toggle: () => setTweaks({ scan: tweaks.scan === "on" ? "off" : "on" }) },
-    { label: "REDUCE MOTION", value: `◂  ${motion} ▸`,             toggle: () => setMotion(m => m === "ON" ? "OFF" : "ON") },
   ];
 
   function activate(i) {
@@ -46,8 +42,8 @@ export default function Settings() {
 
   const SECTIONS = [
     { label: "ACCOUNT", indices: [0, 1, 2] },
-    { label: "GAME",    indices: [3, 4, 5] },
-    { label: "DISPLAY", indices: [6, 7] },
+    { label: "GAME",    indices: [3, 4] },
+    { label: "DISPLAY", indices: [5] },
   ];
 
   return (
