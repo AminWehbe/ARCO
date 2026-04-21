@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useApp } from "../context/AppContext";
+import { submitScore } from "../api/client";
 import { useKeyNav } from "../hooks/useKeyNav";
 import CRT from "../components/CRT";
 import Bezel from "../components/Bezel";
@@ -42,8 +43,9 @@ export default function InGame() {
 
   function handleGameOver(score) {
     setLastScore(score);
-    console.log(`[${activeGame}] game over, score:`, score);
-    // AWS_WIRE: submitScore(activeGame, score)
+    if (user && !user.isGuest) {
+      submitScore(activeGame, score).catch(err => console.error("submitScore failed:", err));
+    }
   }
 
   return (

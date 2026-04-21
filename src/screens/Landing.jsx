@@ -8,10 +8,10 @@ import ScreenHead from "../components/ScreenHead";
 const MENU = ["PLAY AS GUEST", "SIGN IN", "CREATE ACCOUNT", "OPTIONS"];
 
 export default function Landing() {
-  const { signInAsGuest, signIn, signUp, navigate, authError, setAuthError } = useApp();
+  const { signInAsGuest, signIn, signUp, confirm, navigate, authError, setAuthError, pendingEmail } = useApp();
   const [cursor, setCursor] = useState(0);
   const [mode, setMode]     = useState("menu");
-  const [form, setForm]     = useState({ username: "", password: "", email: "" });
+  const [form, setForm]     = useState({ username: "", password: "", email: "", code: "" });
   const [loading, setLoading] = useState(false);
 
   function handleSelect(i) {
@@ -32,14 +32,22 @@ export default function Landing() {
   async function handleSignIn(e) {
     e.preventDefault();
     setLoading(true);
-    await signIn(form.username, form.password);
+    await signIn(form.email, form.password);
     setLoading(false);
   }
 
   async function handleSignUp(e) {
     e.preventDefault();
     setLoading(true);
-    await signUp(form.username, form.password, form.email);
+    const ok = await signUp(form.username, form.password, form.email);
+    setLoading(false);
+    if (ok) setMode("confirm");
+  }
+
+  async function handleConfirm(e) {
+    e.preventDefault();
+    setLoading(true);
+    await confirm(form.code);
     setLoading(false);
   }
 
@@ -101,8 +109,8 @@ export default function Landing() {
             <div className="pixel" style={{ fontSize: 12, color: "var(--phos)", marginBottom: 8 }}>
               {mode === "signin" ? "── SIGN IN ──" : "── CREATE ACCOUNT ──"}
             </div>
-            {field("username", "USERNAME")}
-            {mode === "signup" && field("email", "EMAIL", "email")}
+            {mode === "signup" && field("username", "USERNAME")}
+            {field("email", "EMAIL", "email")}
             {field("password", "PASSWORD", "password")}
             {authError && <div className="pixel" style={{ fontSize: 8, color: "var(--pink)" }}>⚠ {authError}</div>}
             <div style={{ display: "flex", gap: 10 }}>
@@ -111,6 +119,27 @@ export default function Landing() {
               </button>
               <button type="button" className="btn ghost" onClick={() => { setMode("menu"); setAuthError(null); }}>
                 BACK
+              </button>
+            </div>
+          </form>
+        )}
+
+        {mode === "confirm" && (
+          <form
+            onSubmit={handleConfirm}
+            style={{ display: "flex", flexDirection: "column", gap: 14, alignItems: "center", marginBottom: 40 }}
+          >
+            <div className="pixel" style={{ fontSize: 12, color: "var(--phos)", marginBottom: 8 }}>
+              ── VERIFY EMAIL ──
+            </div>
+            <div className="pixel" style={{ fontSize: 9, color: "var(--phos-dim)", textAlign: "center", maxWidth: 300 }}>
+              CHECK YOUR EMAIL FOR A VERIFICATION CODE
+            </div>
+            {field("code", "VERIFICATION CODE")}
+            {authError && <div className="pixel" style={{ fontSize: 8, color: "var(--pink)" }}>⚠ {authError}</div>}
+            <div style={{ display: "flex", gap: 10 }}>
+              <button type="submit" className="btn primary" disabled={loading}>
+                {loading ? "..." : "CONFIRM"}
               </button>
             </div>
           </form>

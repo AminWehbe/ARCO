@@ -1,11 +1,14 @@
-// All AWS API Gateway calls live here. Search "AWS_WIRE" to find every stub.
+// All API calls to the ARCO backend. Token is read from localStorage on every request.
 
 const BASE = import.meta.env.VITE_API_BASE_URL;
 
-// Attach Cognito JWT from session storage to every request
+// Decode JWT payload without a library
+function parseJwt(token) {
+  return JSON.parse(atob(token.split(".")[1]));
+}
+
+// Attach stored Cognito id token to every request
 function authHeaders() {
-  // AWS_WIRE: Cognito — swap localStorage key with real Cognito idToken key once configured
-  // e.g. `CognitoIdentityServiceProvider.<userPoolClientId>.<username>.idToken`
   const token = localStorage.getItem("arco_id_token");
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
@@ -16,73 +19,74 @@ async function request(method, path, body) {
     headers: { "Content-Type": "application/json", ...authHeaders() },
     body: body ? JSON.stringify(body) : undefined,
   });
-  if (!res.ok) throw new Error(`API ${method} ${path} → ${res.status}`);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || `${method} ${path} → ${res.status}`);
+  }
   return res.json();
 }
 
 const get  = (path)       => request("GET",  path);
 const post = (path, body) => request("POST", path, body);
 
-// ── Leaderboard ────────────────────────────────────────────────────────────
-// AWS_WIRE: GET /scores?game={game}&period={today|week|all}  → DynamoDB via Lambda
-export async function fetchLeaderboard(game = "SNAKE", period = "today") {
-  return get(`/scores?game=${game}&period=${period}`);
+// ── Auth ───────────────────────────────────────────────────────────────────
+
+// Register — does not log in, Cognito sends a verification email next
+export async function cognitoSignUp(username, password, email) {
+  return post("/auth/signup", { email, password, username });
 }
 
-// AWS_WIRE: POST /scores  body: { game, score, durationMs }  → Lambda → DynamoDB
-export async function submitScore(game, score, durationMs) {
-  return post("/scores", { game, score, durationMs });
+// Confirm account with the code emailed by Cognito
+export async function cognitoConfirm(email, code) {
+  return post("/auth/confirm", { email, code });
 }
 
-// ── Profile ────────────────────────────────────────────────────────────────
-// AWS_WIRE: GET /users/{userId}/stats  → DynamoDB user record
+// Login — stores token, returns { userId, displayName, email }
+export async function cognitoSignIn(email, password) {
+  const data = await post("/auth/login", { email, password });
+  localStorage.setItem("arco_id_token", data.token);
+  const payload = parseJwt(data.token);
+  return {
+    userId:      payload.sub,
+    displayName: payload.preferred_username || payload.email,
+    email:       payload.email,
+  };
+}
+
+// Logout — clears local token (server-side invalidation is a bonus if it works)
+export async function cognitoSignOut() {
+  localStorage.removeItem("arco_id_token");
+}
+
+// ── Users ──────────────────────────────────────────────────────────────────
+
+// Create profile entry in DynamoDB — called once right after first login
+export async function createUserProfile(username) {
+  return post("/users", { username });
+}
+
+// Fetch profile by userId
 export async function fetchUserStats(userId) {
-  return get(`/users/${userId}/stats`);
+  return get(`/users/${userId}`);
 }
 
-// AWS_WIRE: PATCH /users/{userId}  body: { displayName }  → DynamoDB update
+// Update username or avatar
 export async function updateProfile(userId, fields) {
   return request("PATCH", `/users/${userId}`, fields);
 }
 
-// ── Admin ──────────────────────────────────────────────────────────────────
-// AWS_WIRE: GET /admin/metrics  → CloudWatch GetMetricData via Lambda (IAM-protected)
-export async function fetchAdminMetrics() {
-  return get("/admin/metrics");
+// ── Scores ─────────────────────────────────────────────────────────────────
+
+// Top 10 for a given game (public)
+export async function fetchLeaderboard(game = "snake") {
+  return get(`/scores/${game.toLowerCase()}`);
 }
 
-// AWS_WIRE: GET /admin/alerts  → CloudWatch alarms list via Lambda (IAM-protected)
-export async function fetchAdminAlerts() {
-  return get("/admin/alerts");
+// Post a score for the logged-in user
+export async function submitScore(game, score) {
+  return post("/scores", { gameId: game.toLowerCase(), score });
 }
 
-// ── Auth stubs (Cognito) ───────────────────────────────────────────────────
-// AWS_WIRE: Replace these 3 functions with `aws-amplify/auth` calls once Cognito is set up.
-// Amplify docs: https://docs.amplify.aws/react/build-a-backend/auth/
-//
-//   import { signIn, signUp, signOut, getCurrentUser } from "aws-amplify/auth";
-//
-// All three currently return mocked data so the UI is fully navigable.
-
-export async function cognitoSignIn(username, password) {
-  // AWS_WIRE: await signIn({ username, password });
-  // On success Amplify stores tokens automatically — remove the localStorage line below.
-  console.warn("[AUTH STUB] cognitoSignIn called — not wired to Cognito yet");
-  if (!username || !password) throw new Error("Username and password required");
-  const fakeToken = btoa(`${username}:${Date.now()}`);
-  localStorage.setItem("arco_id_token", fakeToken);
-  return { userId: "u_stub_001", username, displayName: username.toUpperCase() };
-}
-
-export async function cognitoSignUp(username, password, email) {
-  // AWS_WIRE: await signUp({ username, password, options: { userAttributes: { email } } });
-  console.warn("[AUTH STUB] cognitoSignUp called — not wired to Cognito yet");
-  if (!username || !password || !email) throw new Error("All fields required");
-  return { userId: "u_stub_new", username, email };
-}
-
-export async function cognitoSignOut() {
-  // AWS_WIRE: await signOut();
-  console.warn("[AUTH STUB] cognitoSignOut called — not wired to Cognito yet");
-  localStorage.removeItem("arco_id_token");
-}
+// ── Admin (not implemented) ────────────────────────────────────────────────
+export async function fetchAdminMetrics() { return { metrics: [] }; }
+export async function fetchAdminAlerts()  { return { alerts: [] }; }

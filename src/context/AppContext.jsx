@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect } from "react";
-import { cognitoSignIn, cognitoSignUp, cognitoSignOut } from "../api/client";
+import { cognitoSignIn, cognitoSignUp, cognitoConfirm, cognitoSignOut, createUserProfile } from "../api/client";
 
 const Ctx = createContext(null);
 
@@ -13,6 +13,7 @@ export function AppProvider({ children }) {
   const [activeGame, setActiveGame] = useState("SNAKE");
   const [tweaks, setTweaksState]    = useState(DEFAULT_TWEAKS);
   const [authError, setAuthError]   = useState(null);
+  const [pendingEmail, setPendingEmail] = useState(null); // set after signup, cleared after confirm
 
   // Apply tweaks as CSS custom properties
   useEffect(() => {
@@ -36,10 +37,11 @@ export function AppProvider({ children }) {
     navigate("library");
   }
 
-  async function signIn(username, password) {
+  // Sign in with email + password, fetch profile from DynamoDB
+  async function signIn(email, password) {
     setAuthError(null);
     try {
-      const u = await cognitoSignIn(username, password);
+      const u = await cognitoSignIn(email, password);
       setUser({ ...u, isGuest: false });
       navigate("library");
     } catch (e) {
@@ -47,12 +49,27 @@ export function AppProvider({ children }) {
     }
   }
 
+  // Sign up — Cognito sends verification email, returns true on success so UI can move to confirm
   async function signUp(username, password, email) {
     setAuthError(null);
     try {
       await cognitoSignUp(username, password, email);
-      // After sign-up, sign them in automatically
-      const u = await cognitoSignIn(username, password);
+      setPendingEmail({ email, password, username });
+      return true;
+    } catch (e) {
+      setAuthError(e.message);
+      return false;
+    }
+  }
+
+  // Confirm email code → login → create DynamoDB profile → go to library
+  async function confirm(code) {
+    setAuthError(null);
+    try {
+      await cognitoConfirm(pendingEmail.email, code);
+      const u = await cognitoSignIn(pendingEmail.email, pendingEmail.password);
+      await createUserProfile(pendingEmail.username);
+      setPendingEmail(null);
       setUser({ ...u, isGuest: false });
       navigate("library");
     } catch (e) {
@@ -72,7 +89,7 @@ export function AppProvider({ children }) {
   }
 
   return (
-    <Ctx.Provider value={{ screen, navigate, user, activeGame, launchGame, tweaks, setTweaks, signInAsGuest, signIn, signUp, signOut, authError, setAuthError }}>
+    <Ctx.Provider value={{ screen, navigate, user, activeGame, launchGame, tweaks, setTweaks, signInAsGuest, signIn, signUp, confirm, signOut, authError, setAuthError, pendingEmail }}>
       {children}
     </Ctx.Provider>
   );

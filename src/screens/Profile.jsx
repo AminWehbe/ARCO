@@ -32,7 +32,7 @@ export default function Profile() {
   useEffect(() => {
     if (!user || user.isGuest) return;
     fetchUserStats(userId)
-      .then(data => { if (data) setStats(data); })
+      .then(data => { if (data?.perGame) setStats(data); })
       .catch(() => { /* keep mock */ });
   }, [userId]);
 

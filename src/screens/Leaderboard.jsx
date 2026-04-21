@@ -22,7 +22,7 @@ const MOCK_ROWS = [
 const PERIODS = ["TODAY", "WEEK", "ALL TIME"];
 
 export default function Leaderboard() {
-  const { tweaks, navigate } = useApp();
+  const { tweaks, navigate, user } = useApp();
   const GAMES = ["SNAKE", "FLAPPY", "MEMORY", "TIC-TAC", tweaks.g5];
 
   const [gameIdx,   setGameIdx]   = useState(0);
@@ -35,11 +35,21 @@ export default function Leaderboard() {
 
   useEffect(() => {
     setLoading(true);
-    fetchLeaderboard(game, period.toLowerCase().replace(" ", ""))
-      .then(data => { if (data?.rows) setRows(data.rows); })
+    fetchLeaderboard(game)
+      .then(data => {
+        if (!data?.leaderboard) return;
+        const mapped = data.leaderboard.map((item, i) => [
+          String(i + 1).padStart(2, "0"),
+          item.username || item.userId.slice(0, 8),
+          item.score,
+          new Date(item.timestamp).toLocaleDateString(),
+          item.userId === user?.userId,
+        ]);
+        setRows(mapped);
+      })
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, [game, period]);
+  }, [game]);
 
   // Left/right switches game, up/down switches period, ESC goes back
   useKeyNav(e => {
