@@ -215,7 +215,7 @@ export default function BattleshipGame({ onGameOver }) {
         setWon(didWin);
         setPhase("gameover");
         clearSession();
-        if (didWin) onGameOver?.(100);
+        onGameOver?.(didWin ? 1 : 0);
       } else {
         setIsMyTurn(!!yourTurn);
       }

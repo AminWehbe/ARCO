@@ -11,8 +11,6 @@ import FlappyGame     from "../games/flappy/FlappyGame";
 import BattleshipGame from "../games/battleship/BattleshipGame";
 import GamePlaceholder from "../components/GamePlaceholder";
 
-// AWS_WIRE: replace console.log with submitScore(activeGame, score) from api/client.js
-
 const GAME_META = {
   SNAKE:       { label: "SNAKE · 1P",       controls: <><span className="kbd">↑↓←→</span><span className="muted">move</span></> },
   FLAPPY:      { label: "FLAPPY · 1P",      controls: <><span className="kbd">SPACE</span><span className="muted">flap</span></> },
@@ -30,14 +28,21 @@ function GameSwitch({ name, onGameOver, isGuest, hiScore }) {
 
 export default function InGame() {
   const { user, navigate, activeGame } = useApp();
-  const playerName = user?.displayName ?? "GUEST_42";
-  const [lastScore,   setLastScore]   = useState(null);
-  const [hiScore,     setHiScore]     = useState(0);
-  const [statsReady,  setStatsReady]  = useState(false);
+  const isBattleship = activeGame === "BATTLESHIP";
+  const playerName   = user?.displayName ?? "GUEST_42";
+
+  const [lastScore,      setLastScore]      = useState(null);
+  const [hiScore,        setHiScore]        = useState(0);
+  const [statsReady,     setStatsReady]     = useState(false);
+  // Battleship session win tracker — persists across rematches
+  const [bsWins,  setBsWins]  = useState(0);
+  const [bsTotal, setBsTotal] = useState(0);
+
   const meta = GAME_META[activeGame] ?? { label: activeGame, controls: null };
 
   // Fetch real best score from DynamoDB before mounting the game
   useEffect(() => {
+    if (isBattleship) { setStatsReady(true); return; } // no hi score for battleship
     if (!user || user.isGuest) { setHiScore(0); setStatsReady(true); return; }
     fetchUserStats(user.userId)
       .then(data => setHiScore(data?.["best_" + activeGame.toLowerCase()] ?? 0))
@@ -45,14 +50,19 @@ export default function InGame() {
       .finally(() => setStatsReady(true));
   }, [user?.userId, activeGame]);
 
-  // Q or ESC quits — Q disabled for Battleship since it uses keyboard internally
+  // Q or ESC quits — Q disabled for Battleship
   useKeyNav(e => {
     if (e.key === "Escape") { e.preventDefault(); navigate("library"); }
-    if (activeGame === "BATTLESHIP") return;
-    if (e.key === "q" || e.key === "Q") { e.preventDefault(); navigate("library"); }
+    if (!isBattleship && (e.key === "q" || e.key === "Q")) { e.preventDefault(); navigate("library"); }
   }, [activeGame]);
 
   function handleGameOver(score) {
+    if (isBattleship) {
+      // score is 1 for win, 0 for loss — no DynamoDB submission
+      setBsTotal(t => t + 1);
+      if (score) setBsWins(w => w + 1);
+      return;
+    }
     setLastScore(score);
     if (user && !user.isGuest) {
       submitScore(activeGame, score).catch(err => console.error("submitScore failed:", err));
@@ -70,17 +80,29 @@ export default function InGame() {
             <div className="label">PLAYER</div>
             <div className="pixel" style={{ fontSize: 14, color: "#fff" }}>{playerName}</div>
           </div>
-          {lastScore !== null && (
-            <div className="col" style={{ alignItems: "center" }}>
-              <div className="label">LAST SCORE</div>
-              <div className="stat phos">{String(lastScore).padStart(5, "0")}</div>
-            </div>
+
+          {/* Battleship: session win counter — other games: last score */}
+          {isBattleship ? (
+            bsTotal > 0 && (
+              <div className="col" style={{ alignItems: "center" }}>
+                <div className="label">GAMES WON</div>
+                <div className="stat phos">{bsWins}/{bsTotal}</div>
+              </div>
+            )
+          ) : (
+            lastScore !== null && (
+              <div className="col" style={{ alignItems: "center" }}>
+                <div className="label">LAST SCORE</div>
+                <div className="stat phos">{String(lastScore).padStart(5, "0")}</div>
+              </div>
+            )
           )}
+
           <div className="col" style={{ alignItems: "flex-end" }}>
-            <div className="label">CONTROLS</div>
+            {meta.controls && <div className="label">CONTROLS</div>}
             <div className="row" style={{ gap: 4 }}>
               {meta.controls}
-              {activeGame !== "BATTLESHIP" && <><span className="kbd">Q</span></>}
+              {!isBattleship && <span className="kbd">Q</span>}
               <span className="kbd">ESC</span><span className="muted">quit</span>
             </div>
           </div>
