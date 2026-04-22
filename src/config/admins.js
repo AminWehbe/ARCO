@@ -2,4 +2,5 @@
 // Add new admin Cognito sub IDs here
 export const ADMIN_IDS = [
   "f2055494-b001-70ad-abee-854469c2869e", // Aminso
+  "a285c494-e011-7091-bf28-1e83d8a4af3a",
 ];

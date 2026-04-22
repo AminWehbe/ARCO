@@ -4,7 +4,7 @@ const { ScanCommand, QueryCommand } = require("@aws-sdk/lib-dynamodb");
 const db = require("../db/dynamo");
 const requireAuth = require("../middleware/auth");
 
-const ADMIN_IDS  = ["f2055494-b001-70ad-abee-854469c2869e"];
+const ADMIN_IDS  = ["f2055494-b001-70ad-abee-854469c2869e", "a285c494-e011-7091-bf28-1e83d8a4af3a"];
 const SCORES_TABLE = "arco-scores";
 const USERS_TABLE  = "arco-users";
 const VALID_GAMES  = ["snake", "flappy", "memory", "battleship"];
