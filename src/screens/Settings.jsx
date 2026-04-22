@@ -6,46 +6,55 @@ import CRT from "../components/CRT";
 import Bezel from "../components/Bezel";
 import ScreenHead from "../components/ScreenHead";
 
-// AWS_WIRE: PATCH /users/{userId} to persist displayName — call updateProfile() from api/client.js
-
 const MUSIC_OPTIONS = ["8BIT", "ARCADE", "CELL THEME", "OFF"];
 const MUSIC_LABELS  = { "8BIT": "8-BIT TUNE", "ARCADE": "ARCADE FUN", "CELL THEME": "CELL THEME", "OFF": "OFF" };
+
+// Volume displayed as filled blocks out of 10
+function volBar(v) {
+  const filled = Math.round(v * 10);
+  return "█".repeat(filled) + "░".repeat(10 - filled);
+}
 
 export default function Settings() {
   const { tweaks, setTweaks, navigate, prevScreen, signOut, user } = useApp();
   const playClick = useClickSound();
   const [cursor, setCursor] = useState(0);
 
-  // Flat list of interactive items (sections are skipped in the handler)
   const items = [
-    { label: "DISPLAY NAME",  value: user?.displayName ?? "—",      action: null },
-    { label: "EMAIL",         value: user?.email       ?? "—",      action: null },
-    { label: "SIGN OUT",      value: "▸",                           action: signOut },
-    { label: "MUSIC",         value: `◂  ${MUSIC_LABELS[tweaks.music]}  ▸`, toggle: () => setTweaks({ music: MUSIC_OPTIONS[(MUSIC_OPTIONS.indexOf(tweaks.music) + 1) % MUSIC_OPTIONS.length] }) },
-    { label: "SOUND",         value: `◂  ${tweaks.sound}  ▸`,      toggle: () => setTweaks({ sound: tweaks.sound === "ON" ? "OFF" : "ON" }) },
-    { label: "CRT SCANLINES", value: `◂  ${tweaks.scan.toUpperCase()}  ▸`, toggle: () => setTweaks({ scan: tweaks.scan === "on" ? "off" : "on" }) },
+    { label: "DISPLAY NAME",  value: user?.displayName ?? "—", action: null },
+    { label: "EMAIL",         value: user?.email       ?? "—", action: null },
+    { label: "SIGN OUT",      value: "▸",                      action: signOut },
+    { label: "MUSIC",         value: `◂  ${MUSIC_LABELS[tweaks.music]}  ▸`,
+      toggle: () => setTweaks({ music: MUSIC_OPTIONS[(MUSIC_OPTIONS.indexOf(tweaks.music) + 1) % MUSIC_OPTIONS.length] }) },
+    { label: "VOLUME",        value: `◂  ${volBar(tweaks.volume)}  ▸`,
+      step: dir => setTweaks({ volume: Math.min(1, Math.max(0.1, Math.round((tweaks.volume + dir * 0.1) * 10) / 10)) }) },
+    { label: "SOUND",         value: `◂  ${tweaks.sound}  ▸`,
+      toggle: () => setTweaks({ sound: tweaks.sound === "ON" ? "OFF" : "ON" }) },
+    { label: "CRT SCANLINES", value: `◂  ${tweaks.scan.toUpperCase()}  ▸`,
+      toggle: () => setTweaks({ scan: tweaks.scan === "on" ? "off" : "on" }) },
   ];
 
-  function activate(i) {
+  function activate(i, dir = 0) {
     playClick();
     const item = items[i];
     if (item.action) { item.action(); return; }
+    if (item.step)   { item.step(dir || 1); return; }
     if (item.toggle) item.toggle();
   }
 
   useKeyNav(e => {
     if (e.key === "ArrowUp")    { e.preventDefault(); setCursor(c => (c - 1 + items.length) % items.length); }
     if (e.key === "ArrowDown")  { e.preventDefault(); setCursor(c => (c + 1) % items.length); }
-    if (e.key === "ArrowLeft" || e.key === "ArrowRight" || e.key === "Enter") {
-      e.preventDefault(); activate(cursor);
-    }
+    if (e.key === "ArrowLeft")  { e.preventDefault(); activate(cursor, -1); }
+    if (e.key === "ArrowRight") { e.preventDefault(); activate(cursor,  1); }
+    if (e.key === "Enter")      { e.preventDefault(); activate(cursor); }
     if (e.key === "Escape")     { e.preventDefault(); navigate(prevScreen); }
   }, [cursor, items]);
 
   const SECTIONS = [
     { label: "ACCOUNT", indices: [0, 1, 2] },
-    { label: "GAME",    indices: [3, 4] },
-    { label: "DISPLAY", indices: [5] },
+    { label: "GAME",    indices: [3, 4, 5] },
+    { label: "DISPLAY", indices: [6] },
   ];
 
   return (
@@ -59,7 +68,7 @@ export default function Settings() {
             <div key={sec.label}>
               <div className="label" style={{ color: "var(--phos)", margin: "18px 0 6px" }}>{sec.label}</div>
               {sec.indices.map(i => {
-                const item = items[i];
+                const item   = items[i];
                 const active = cursor === i;
                 return (
                   <div
@@ -70,7 +79,9 @@ export default function Settings() {
                     onClick={() => activate(i)}
                   >
                     <span>{(active ? "▸ " : "  ") + item.label}</span>
-                    <span style={{ textAlign: "right", color: active ? "#fff" : "var(--phos-bright)" }}>{item.value}</span>
+                    <span style={{ textAlign: "right", color: active ? "#fff" : "var(--phos-bright)", fontFamily: item.step ? "monospace" : undefined }}>
+                      {item.value}
+                    </span>
                   </div>
                 );
               })}

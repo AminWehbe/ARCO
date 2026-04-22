@@ -14,7 +14,7 @@ import Settings    from "./screens/Settings";
 function Router() {
   const { screen, tweaks } = useApp();
   const [tweaksOpen, setTweaksOpen] = useState(false);
-  useMusic(tweaks.music);
+  useMusic(tweaks.music, tweaks.volume);
 
   // Wireframe editor compat — open tweaks panel via postMessage
   useEffect(() => {

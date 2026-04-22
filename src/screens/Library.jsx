@@ -83,7 +83,24 @@ export default function Library() {
     <>
       <ScreenHead num="02" title="Library" note="the hall — walk up to any cabinet" />
       <CRT>
-        <Bezel title="THE HALL" right={<span className="muted" style={{ fontSize: 14 }}>5 of 6 cabinets</span>} />
+        <Bezel title="THE HALL" right={
+          <div className="row" style={{ gap: 6 }}>
+            <span className="pill" style={{ cursor: "pointer" }} onClick={() => { playClick(); navigate("profile"); }}>
+              <span className="kbd" style={{ fontSize: 9 }}>P</span> PROFILE
+            </span>
+            <span className="pill" style={{ cursor: "pointer" }} onClick={() => { playClick(); navigate("leaderboard"); }}>
+              <span className="kbd" style={{ fontSize: 9 }}>L</span> LEADERBOARD
+            </span>
+            <span className="pill" style={{ cursor: "pointer" }} onClick={() => { playClick(); navigate("settings"); }}>
+              <span className="kbd" style={{ fontSize: 9 }}>S</span> SETTINGS
+            </span>
+            {isAdmin && (
+              <span className="pill accent" style={{ cursor: "pointer" }} onClick={() => { playClick(); navigate("admin"); }}>
+                <span className="kbd" style={{ fontSize: 9 }}>A</span> ADMIN
+              </span>
+            )}
+          </div>
+        } />
 
         <div className="pixel-title" style={{ fontSize: 20, textAlign: "center", margin: "8px 0 18px" }}>
           SELECT A GAME
@@ -111,25 +128,6 @@ export default function Library() {
               <span className="kbd">← →</span><span className="muted">move</span>
               <span className="kbd">↑ ↓</span><span className="muted">row</span>
               <span className="kbd">ENTER</span><span className="muted">play</span>
-            </div>
-          </div>
-          {/* Nav row */}
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <div className="row" style={{ gap: 6 }}>
-              <span className="pill" style={{ cursor: "pointer" }} onClick={() => { playClick(); navigate("profile"); }}>
-                <span className="kbd" style={{ fontSize: 9 }}>P</span> PROFILE
-              </span>
-              <span className="pill" style={{ cursor: "pointer" }} onClick={() => { playClick(); navigate("leaderboard"); }}>
-                <span className="kbd" style={{ fontSize: 9 }}>L</span> LEADERBOARD
-              </span>
-              <span className="pill" style={{ cursor: "pointer" }} onClick={() => { playClick(); navigate("settings"); }}>
-                <span className="kbd" style={{ fontSize: 9 }}>S</span> SETTINGS
-              </span>
-              {isAdmin && (
-                <span className="pill accent" style={{ cursor: "pointer" }} onClick={() => { playClick(); navigate("admin"); }}>
-                  <span className="kbd" style={{ fontSize: 9 }}>A</span> ADMIN
-                </span>
-              )}
             </div>
           </div>
         </div>

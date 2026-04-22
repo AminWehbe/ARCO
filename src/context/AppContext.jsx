@@ -6,7 +6,7 @@ const Ctx = createContext(null);
 
 const SCREENS = ["landing", "library", "ingame", "leaderboard", "profile", "admin", "settings"];
 
-const DEFAULT_TWEAKS = { accent: "#4ef59a", pink: "#ff3b6b", scan: "on", g5: "PONG", music: localStorage.getItem("arco_music") || "8BIT", sound: localStorage.getItem("arco_sound") || "ON" };
+const DEFAULT_TWEAKS = { accent: "#4ef59a", pink: "#ff3b6b", scan: "on", g5: "PONG", music: localStorage.getItem("arco_music") || "8BIT", sound: localStorage.getItem("arco_sound") || "ON", volume: Number(localStorage.getItem("arco_volume") ?? 0.6) };
 
 export function AppProvider({ children }) {
   const [screen, setScreen]       = useState("landing");
@@ -27,7 +27,8 @@ export function AppProvider({ children }) {
 
   function setTweaks(updates) {
     if (updates.music !== undefined) localStorage.setItem("arco_music", updates.music);
-    if (updates.sound !== undefined) localStorage.setItem("arco_sound", updates.sound);
+    if (updates.sound   !== undefined) localStorage.setItem("arco_sound",  updates.sound);
+    if (updates.volume  !== undefined) localStorage.setItem("arco_volume", updates.volume);
     setTweaksState(prev => ({ ...prev, ...updates }));
   }
 

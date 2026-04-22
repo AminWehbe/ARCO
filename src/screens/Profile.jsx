@@ -224,11 +224,10 @@ export default function Profile() {
           {/* Right: per-game bests (always visible) */}
           <div className="col">
             <div className="label">PER-GAME BEST</div>
-            {perGame.map(([g, s, p]) => (
-              <div key={g} style={{ display: "grid", gridTemplateColumns: "90px 1fr 80px", gap: 10, alignItems: "center", padding: "6px 0", borderBottom: "2px dashed var(--phos-dim)" }}>
+            {perGame.map(([g, s]) => (
+              <div key={g} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderBottom: "2px dashed var(--phos-dim)" }}>
                 <div className="pixel bright" style={{ fontSize: 10 }}>{g}</div>
-                <div className="bar"><span style={{ width: `${p * 100}%` }} /></div>
-                <div className="pixel" style={{ fontSize: 9, textAlign: "right" }}>{s}</div>
+                <div className="pixel" style={{ fontSize: 9 }}>{s}</div>
               </div>
             ))}
           </div>
