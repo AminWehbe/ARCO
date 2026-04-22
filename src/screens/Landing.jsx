@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useApp } from "../context/AppContext";
 import { useKeyNav } from "../hooks/useKeyNav";
 import { useClickSound } from "../hooks/useClickSound";
+import { fetchPlatformStats } from "../api/client";
 import CRT from "../components/CRT";
 import Bezel from "../components/Bezel";
 import ScreenHead from "../components/ScreenHead";
@@ -11,7 +12,13 @@ const MENU = ["PLAY AS GUEST", "SIGN IN", "CREATE ACCOUNT", "OPTIONS"];
 export default function Landing() {
   const { signInAsGuest, signIn, signUp, confirm, navigate, authError, setAuthError, pendingEmail } = useApp();
   const playClick = useClickSound();
-  const [cursor, setCursor] = useState(0);
+  const [cursor,       setCursor]      = useState(0);
+  const [platformStats, setPlatformStats] = useState(null);
+
+  // Fetch real user count + global hi score on mount
+  useEffect(() => {
+    fetchPlatformStats().then(setPlatformStats).catch(() => {});
+  }, []);
   const [mode, setMode]     = useState("menu");
   const [form, setForm]     = useState({ username: "", password: "", email: "", code: "" });
   const [loading, setLoading] = useState(false);
@@ -153,7 +160,9 @@ export default function Landing() {
             <span className="kbd">↑</span><span className="kbd">↓</span><span className="kbd">ENTER</span>
             <span className="muted">navigate · select</span>
           </div>
-          <span className="muted pixel" style={{ fontSize: 8 }}>● 1,284 ONLINE · HI 98,400 · © 2026</span>
+          <span className="muted pixel" style={{ fontSize: 8 }}>
+            ● {platformStats ? `${platformStats.totalUsers.toLocaleString()} PLAYERS` : "— PLAYERS"} · HI {platformStats ? platformStats.globalHi.toLocaleString() : "—"} · © 2026
+          </span>
         </div>
       </CRT>
     </>

@@ -93,3 +93,10 @@ export async function submitScore(game, score) {
 export async function fetchAdminStats() {
   return get("/admin/stats");
 }
+
+// ── Public stats ───────────────────────────────────────────────────────────
+
+// Fetch public platform stats — total users + global all-time hi score
+export async function fetchPlatformStats() {
+  return get("/stats");
+}
