@@ -253,12 +253,47 @@ Elastic IP stays the same — CloudFront needs no update.
 - Score submission on game over for all 4 games
 - Leaderboard with real DynamoDB data + ADMIN badge
 - Profile: real stats, level progression, avatar picker, EDIT mode
-- Settings: music, sound, CRT scanlines, back to prevScreen
+- Settings: music, sound (Web Audio API beep), CRT scanlines, back to prevScreen
 - Admin dashboard: real EC2 health, user count, score count, per-game top scores (admin-only)
 - Library: keyboard nav (P/L/S/A), hi scores from DynamoDB
 - In-game hi scores from DynamoDB, guests see nothing
+- Landing footer: real player count from DynamoDB via public GET /stats
+- UI click sound effects wired across all screens, toggled via Settings
+- Battleship online multiplayer via socket.io (phases: lobby → placement → playing → gameover)
 
 **Pending / stretch goals:**
-- Battleship online multiplayer via WebSocket
 - Auto Scaling Group + ALB (teammate working on this)
-- Button press sound effects (SOUND toggle in Settings is wired but no audio yet)
+
+---
+
+## Battleship Online — Architecture
+
+- **Backend:** `server/game.js` (pure logic), `server/rooms.js` (in-memory store), `server/socket.js` (event handlers)
+- **Transport:** socket.io on same EC2 port (3000), attached to http.createServer wrapping Express
+- **CloudFront:** `/socket.io*` behavior routes to EC2 for the WS handshake
+- **Frontend:** `src/api/socket.js` (singleton), `src/games/battleship/BattleshipGame.jsx` (phases)
+- **Reconnect:** `arco_bs_session` in localStorage → `rejoin-room` event → 60s grace period on server
+- **Score:** winner submits 100 pts to DynamoDB via existing submitScore()
+
+### Socket Events
+| Client → Server | Description |
+|---|---|
+| `create-room` | Create room, get 4-char code |
+| `join-room` | Join by code |
+| `rejoin-room` | Reconnect after refresh |
+| `place-ships` | Submit placement (validated server-side) |
+| `attack` | Fire at cell (turn-enforced server-side) |
+| `rematch` | Request rematch |
+
+| Server → Client | Description |
+|---|---|
+| `room-created` | Room ready |
+| `opponent-joined` | 2nd player connected |
+| `joined` | Confirm join |
+| `rejoined` | Full state restore on reconnect |
+| `rejoin-failed` | Room expired |
+| `placement-confirmed` | Ships accepted |
+| `game-start` | Both ready, includes yourTurn |
+| `attack-result` | Hit/miss sent to both (isAttacker flag distinguishes) |
+| `opponent-disconnected` | 60s grace starts |
+| `rematch-start` | Both agreed, reset to placement |

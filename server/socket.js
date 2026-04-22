@@ -66,11 +66,13 @@ module.exports = function attachSocket(io) {
 
       const opp = room.players[1 - idx];
       socket.emit("rejoined", {
+        roomCode:           room.code,
         phase:              room.phase,
         opponentUsername:   opp?.username ?? null,
         yourTurn:           room.phase === "playing" && room.turn === idx,
         shots:              player.shots,       // your shots against opponent
         opponentShots:      opp?.shots ?? null, // opponent's shots on your board
+        board:              player.board,       // own ship positions to re-render fleet
       });
       if (opp?.socketId) io.to(opp.socketId).emit("opponent-reconnected");
     });

@@ -174,10 +174,14 @@ export default function BattleshipGame({ onGameOver }) {
       saveSession(code, userId);
     });
 
-    socket.on("rejoined", ({ phase: p, opponentUsername: oppName, yourTurn, shots, opponentShots: oppShots }) => {
+    socket.on("rejoined", ({ roomCode: code, phase: p, opponentUsername: oppName, yourTurn, shots, opponentShots: oppShots, board }) => {
+      // Restore roomCode — critical for attack/rematch events after reconnect
+      if (code) setRoomCode(code);
       if (oppName) setOpponentUsername(oppName);
-      if (shots)      setMyShots(shots);
-      if (oppShots)   setOpponentShots(oppShots);
+      if (shots)    setMyShots(shots);
+      if (oppShots) setOpponentShots(oppShots);
+      // Convert server board (null|shipName) back to client format ({ ship })
+      if (board)    setMyBoard(board.map(row => row.map(cell => ({ ship: cell }))));
       setIsMyTurn(!!yourTurn);
       setDisconnected(false);
       setPhase(p);
