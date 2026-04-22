@@ -1,16 +1,11 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
+import { useApp } from "../../context/AppContext";
 import { useKeyNav } from "../../hooks/useKeyNav";
-
-// WS_WIRE: import { connectRoom, emitFire, emitShipsPlaced, onGameState, onGameOver } from "../../api/socket.js"
-// WS_WIRE: Socket events to implement on EC2 Express:
-//   Client → Server: "ships_placed" { playerId, board }
-//   Client → Server: "fire"         { playerId, row, col }
-//   Server → Client: "game_state"   { shots, lastHit, turn }
-//   Server → Client: "game_over"    { winner }
+import { getSocket, destroySocket, saveSession, loadSession, clearSession } from "../../api/socket";
 
 const ROWS = 10;
 const COLS = 10;
-const CELL = 34;
+const CELL = 32;
 const LETTERS = ["A","B","C","D","E","F","G","H","I","J"];
 
 const SHIPS = [
@@ -24,15 +19,11 @@ const SHIPS = [
 // ── Board helpers ─────────────────────────────────────────────────────────────
 
 function emptyBoard() {
-  return Array.from({ length: ROWS }, () =>
-    Array.from({ length: COLS }, () => ({ ship: null }))
-  );
+  return Array.from({ length: ROWS }, () => Array.from({ length: COLS }, () => ({ ship: null })));
 }
 
 function emptyShots() {
-  return Array.from({ length: ROWS }, () =>
-    Array.from({ length: COLS }, () => ({ fired: false, hit: false }))
-  );
+  return Array.from({ length: ROWS }, () => Array.from({ length: COLS }, () => ({ fired: false, hit: false })));
 }
 
 function canPlace(board, row, col, size, dir) {
@@ -54,21 +45,15 @@ function doPlace(board, row, col, size, dir, name) {
   return b;
 }
 
-function allSunk(board, shots) {
+// Convert placed board to ships array for server
+function boardToShips(board) {
+  const found = {};
   for (let r = 0; r < ROWS; r++)
-    for (let c = 0; c < COLS; c++)
-      if (board[r][c].ship && !shots[r][c].hit) return false;
-  return true;
-}
-
-function shipsRemaining(board, shots) {
-  return SHIPS.filter(s =>
-    Array.from({ length: ROWS }).some((_, r) =>
-      Array.from({ length: COLS }).some((_, c) =>
-        board[r][c].ship === s.name && !shots[r][c].hit
-      )
-    )
-  ).length;
+    for (let c = 0; c < COLS; c++) {
+      const name = board[r][c].ship;
+      if (name) { if (!found[name]) found[name] = []; found[name].push({ r, c }); }
+    }
+  return Object.entries(found).map(([name, cells]) => ({ name, cells }));
 }
 
 // ── Grid component ────────────────────────────────────────────────────────────
@@ -76,9 +61,9 @@ function shipsRemaining(board, shots) {
 // mode "own"    → your ships + incoming enemy shots (read-only)
 // mode "enemy"  → fog of war, only reveals fired shots, clickable
 
-function Grid({ board, shots = emptyShots(), mode, hoverCells, onCellClick, onCellHover }) {
+function Grid({ board, shots = emptyShots(), mode, hoverCells, onCellClick, onCellHover, disabled }) {
   return (
-    <div style={{ display: "inline-block", userSelect: "none" }}>
+    <div style={{ display: "inline-block", userSelect: "none", opacity: disabled ? 0.5 : 1 }}>
       {/* Column numbers */}
       <div style={{ display: "flex", paddingLeft: CELL }}>
         {Array.from({ length: COLS }, (_, c) => (
@@ -90,41 +75,34 @@ function Grid({ board, shots = emptyShots(), mode, hoverCells, onCellClick, onCe
       {/* Rows */}
       {Array.from({ length: ROWS }, (_, r) => (
         <div key={r} style={{ display: "flex" }}>
-          {/* Row letter */}
           <div style={{ width: CELL, display: "grid", placeItems: "center", fontFamily: "'Press Start 2P'", fontSize: 7, color: "var(--phos-dim)" }}>
             {LETTERS[r]}
           </div>
-          {/* Cells */}
           {Array.from({ length: COLS }, (_, c) => {
-            const cell   = board[r][c];
-            const shot   = shots[r][c];
-            const hover  = hoverCells?.find(h => h.r === r && h.c === c);
-            const valid  = hoverCells?.[0]?.valid;
+            const cell  = board[r][c];
+            const shot  = shots[r][c];
+            const hover = hoverCells?.find(h => h.r === r && h.c === c);
+            const valid = hoverCells?.[0]?.valid;
 
-            let bg      = "#08080e";
-            let border  = `1px solid var(--phos-dim)`;
-            let cursor  = "default";
-            let content = null;
+            let bg = "#08080e", border = "1px solid var(--phos-dim)", cursor = "default", content = null;
 
             if (mode === "place") {
-              if (cell.ship)  { bg = "rgba(78,245,154,0.25)"; border = "1px solid var(--phos)"; }
-              if (hover)      { bg = valid ? "rgba(78,245,154,0.55)" : "rgba(255,59,107,0.45)"; border = valid ? "1px solid var(--phos)" : "1px solid var(--pink)"; cursor = "pointer"; }
+              if (cell.ship) { bg = "rgba(78,245,154,0.25)"; border = "1px solid var(--phos)"; }
+              if (hover)     { bg = valid ? "rgba(78,245,154,0.55)" : "rgba(255,59,107,0.45)"; border = valid ? "1px solid var(--phos)" : "1px solid var(--pink)"; cursor = "pointer"; }
               else if (!cell.ship) cursor = "crosshair";
             }
-
             if (mode === "own") {
               if (cell.ship) { bg = "rgba(78,245,154,0.15)"; border = "1px solid var(--phos)"; }
               if (shot.fired) content = shot.hit
-                ? <span style={{ color: "#ff3b6b", fontSize: 16, lineHeight: 1 }}>✕</span>
-                : <span style={{ color: "var(--phos-dim)", fontSize: 28, lineHeight: 1 }}>●</span>;
+                ? <span style={{ color: "#ff3b6b", fontSize: 14, lineHeight: 1 }}>✕</span>
+                : <span style={{ color: "var(--phos-dim)", fontSize: 24, lineHeight: 1 }}>●</span>;
             }
-
             if (mode === "enemy") {
-              if (!shot.fired) cursor = "crosshair";
+              if (!shot.fired && !disabled) cursor = "crosshair";
               if (shot.fired) {
                 content = shot.hit
-                  ? <span style={{ color: "#ff3b6b", fontSize: 16, lineHeight: 1 }}>✕</span>
-                  : <span style={{ color: "var(--phos-dim)", fontSize: 28, lineHeight: 1 }}>●</span>;
+                  ? <span style={{ color: "#ff3b6b", fontSize: 14, lineHeight: 1 }}>✕</span>
+                  : <span style={{ color: "var(--phos-dim)", fontSize: 24, lineHeight: 1 }}>●</span>;
                 if (shot.hit) { bg = "rgba(255,59,107,0.18)"; border = "1px solid var(--pink)"; }
               }
             }
@@ -132,10 +110,10 @@ function Grid({ board, shots = emptyShots(), mode, hoverCells, onCellClick, onCe
             return (
               <div
                 key={c}
-                style={{ width: CELL, height: CELL, background: bg, border, display: "grid", placeItems: "center", cursor, boxSizing: "border-box", transition: "background 0.08s" }}
-                onMouseEnter={() => onCellHover?.(r, c)}
-                onMouseLeave={() => onCellHover?.(null, null)}
-                onClick={() => onCellClick?.(r, c)}
+                style={{ width: CELL, height: CELL, background: bg, border, display: "grid", placeItems: "center", cursor: disabled ? "default" : cursor, boxSizing: "border-box", transition: "background 0.08s" }}
+                onMouseEnter={() => !disabled && onCellHover?.(r, c)}
+                onMouseLeave={() => !disabled && onCellHover?.(null, null)}
+                onClick={() => !disabled && onCellClick?.(r, c)}
               >
                 {content}
               </div>
@@ -147,153 +125,252 @@ function Grid({ board, shots = emptyShots(), mode, hoverCells, onCellClick, onCe
   );
 }
 
-// ── Main game component ───────────────────────────────────────────────────────
+// ── Main component ────────────────────────────────────────────────────────────
 
-// Props:
-//   onGameOver(winnerPlayerNum) — AWS_WIRE: hook up submitScore in InGame.jsx
+// Phases: lobby | waiting | placement | waiting-ready | playing | gameover
 export default function BattleshipGame({ onGameOver }) {
-  const [phase,       setPhase]       = useState("place"); // place | handoff | battle | gameover
-  const [turn,        setTurn]        = useState(1);
-  const [boards,      setBoards]      = useState({ 1: emptyBoard(), 2: emptyBoard() });
-  const [shots,       setShots]       = useState({ 1: emptyShots(), 2: emptyShots() });
-  const [shipIdx,     setShipIdx]     = useState(0);
-  const [dir,         setDir]         = useState("H");
-  const [hover,       setHover]       = useState(null);
-  const [handoffMsg,  setHandoffMsg]  = useState("");
-  const [handoffNext, setHandoffNext] = useState(null);
-  const [winner,      setWinner]      = useState(null);
-  const [lastResult,  setLastResult]  = useState(null); // "HIT" | "MISS" | "SUNK"
+  const { user } = useApp();
+  const userId   = user?.userId ?? "guest";
+  const username = user?.displayName ?? "GUEST";
 
-  const opponent    = turn === 1 ? 2 : 1;
-  const currentShip = SHIPS[shipIdx];
+  const [phase,               setPhase]               = useState("lobby");
+  const [roomCode,            setRoomCode]            = useState("");
+  const [inputCode,           setInputCode]           = useState("");
+  const [opponentUsername,    setOpponentUsername]    = useState("");
+  const [myBoard,             setMyBoard]             = useState(emptyBoard());
+  const [myShots,             setMyShots]             = useState(emptyShots()); // my shots on opponent board
+  const [opponentShots,       setOpponentShots]       = useState(emptyShots()); // opponent shots on my board
+  const [shipIdx,             setShipIdx]             = useState(0);
+  const [dir,                 setDir]                 = useState("H");
+  const [hover,               setHover]               = useState(null);
+  const [isMyTurn,            setIsMyTurn]            = useState(false);
+  const [lastResult,          setLastResult]          = useState(null);
+  const [error,               setError]               = useState(null);
+  const [won,                 setWon]                 = useState(null);
+  const [opponentWantsRematch,setOpponentWantsRematch]= useState(false);
+  const [disconnected,        setDisconnected]        = useState(false);
 
-  // R to rotate during placement, Enter to continue from handoff
+  // ── Socket setup ────────────────────────────────────────────────────────────
+  useEffect(() => {
+    const socket = getSocket();
+    socket.connect();
+
+    socket.on("room-created", ({ roomCode: code }) => {
+      setRoomCode(code);
+      setPhase("waiting");
+      saveSession(code, userId);
+    });
+
+    socket.on("opponent-joined", ({ username: oppName }) => {
+      setOpponentUsername(oppName);
+      setDisconnected(false);
+      setPhase("placement");
+    });
+
+    socket.on("joined", ({ roomCode: code, opponentUsername: oppName }) => {
+      setRoomCode(code);
+      setOpponentUsername(oppName);
+      setPhase("placement");
+      saveSession(code, userId);
+    });
+
+    socket.on("rejoined", ({ phase: p, opponentUsername: oppName, yourTurn, shots, opponentShots: oppShots }) => {
+      if (oppName) setOpponentUsername(oppName);
+      if (shots)      setMyShots(shots);
+      if (oppShots)   setOpponentShots(oppShots);
+      setIsMyTurn(!!yourTurn);
+      setDisconnected(false);
+      setPhase(p);
+    });
+
+    socket.on("rejoin-failed", () => { clearSession(); setPhase("lobby"); });
+
+    socket.on("placement-confirmed", () => setPhase("waiting-ready"));
+
+    socket.on("game-start", ({ yourTurn }) => {
+      setIsMyTurn(yourTurn);
+      setPhase("playing");
+    });
+
+    socket.on("attack-result", ({ r, c, hit, sunkShip, gameOver, won: didWin, isAttacker, yourTurn }) => {
+      if (isAttacker) {
+        // My shot landed — update my shots grid
+        setMyShots(prev => prev.map((row, ri) =>
+          row.map((cell, ci) => ri === r && ci === c ? { fired: true, hit } : cell)
+        ));
+        if (hit)      setLastResult(sunkShip ? `${sunkShip} SUNK!` : "HIT!");
+        else          setLastResult("MISS");
+      } else {
+        // Opponent fired at me — update opponent shots on my board
+        setOpponentShots(prev => prev.map((row, ri) =>
+          row.map((cell, ci) => ri === r && ci === c ? { fired: true, hit } : cell)
+        ));
+      }
+
+      if (gameOver) {
+        setWon(didWin);
+        setPhase("gameover");
+        clearSession();
+        if (didWin) onGameOver?.(100);
+      } else {
+        setIsMyTurn(!!yourTurn);
+      }
+    });
+
+    socket.on("opponent-disconnected", () => setDisconnected(true));
+    socket.on("opponent-reconnected",  () => setDisconnected(false));
+    socket.on("opponent-wants-rematch",() => setOpponentWantsRematch(true));
+
+    socket.on("rematch-start", () => {
+      setMyBoard(emptyBoard()); setMyShots(emptyShots()); setOpponentShots(emptyShots());
+      setShipIdx(0); setDir("H"); setHover(null); setLastResult(null);
+      setWon(null); setOpponentWantsRematch(false); setDisconnected(false);
+      setPhase("placement");
+    });
+
+    socket.on("error", ({ message }) => setError(message));
+
+    // Try to rejoin a previous session on mount
+    const session = loadSession();
+    if (session) socket.emit("rejoin-room", { roomCode: session.roomCode, userId: session.userId });
+
+    return () => {
+      socket.removeAllListeners();
+      destroySocket();
+      clearSession();
+    };
+  }, []);
+
+  // ── Key nav ─────────────────────────────────────────────────────────────────
   useKeyNav(e => {
-    if ((e.key === "r" || e.key === "R") && phase === "place") {
+    if ((e.key === "r" || e.key === "R") && phase === "placement") {
       setDir(d => d === "H" ? "V" : "H");
     }
-    if (e.key === "Enter" && phase === "handoff") {
-      e.preventDefault();
-      handoffNext?.();
-    }
-  }, [phase, handoffNext]);
+  }, [phase]);
 
-  // Hover preview cells during placement
+  // ── Actions ─────────────────────────────────────────────────────────────────
+  function createRoom() {
+    setError(null);
+    getSocket().emit("create-room", { userId, username });
+  }
+
+  function joinRoom() {
+    if (!inputCode.trim()) return;
+    setError(null);
+    getSocket().emit("join-room", { roomCode: inputCode.trim().toUpperCase(), userId, username });
+  }
+
+  function handlePlaceClick(r, c) {
+    const ship = SHIPS[shipIdx];
+    if (!ship || !canPlace(myBoard, r, c, ship.size, dir)) return;
+    const newBoard = doPlace(myBoard, r, c, ship.size, dir, ship.name);
+    setMyBoard(newBoard);
+
+    if (shipIdx + 1 < SHIPS.length) {
+      setShipIdx(shipIdx + 1);
+    } else {
+      // All placed — send to server
+      getSocket().emit("place-ships", { roomCode, userId, ships: boardToShips(newBoard) });
+    }
+  }
+
+  function handleFireClick(r, c) {
+    if (!isMyTurn || myShots[r][c].fired) return;
+    getSocket().emit("attack", { roomCode, userId, r, c });
+  }
+
+  function requestRematch() {
+    setOpponentWantsRematch(false);
+    getSocket().emit("rematch", { roomCode, userId });
+  }
+
+  function backToLobby() {
+    clearSession();
+    setPhase("lobby");
+    setRoomCode(""); setInputCode(""); setOpponentUsername("");
+    setMyBoard(emptyBoard()); setMyShots(emptyShots()); setOpponentShots(emptyShots());
+    setShipIdx(0); setDir("H"); setHover(null); setLastResult(null);
+    setWon(null); setError(null); setDisconnected(false); setOpponentWantsRematch(false);
+  }
+
+  // ── Hover preview ───────────────────────────────────────────────────────────
   let hoverCells = null;
-  if (phase === "place" && hover && currentShip) {
-    const valid = canPlace(boards[turn], hover.r, hover.c, currentShip.size, dir);
-    hoverCells = Array.from({ length: currentShip.size }, (_, i) => ({
-      r: dir === "H" ? hover.r : hover.r + i,
+  if (phase === "placement" && hover && SHIPS[shipIdx]) {
+    const ship  = SHIPS[shipIdx];
+    const valid = canPlace(myBoard, hover.r, hover.c, ship.size, dir);
+    hoverCells  = Array.from({ length: ship.size }, (_, i) => ({
+      r: dir === "H" ? hover.r     : hover.r + i,
       c: dir === "H" ? hover.c + i : hover.c,
       valid,
     })).filter(h => h.r < ROWS && h.c < COLS);
   }
 
-  function goHandoff(msg, next) {
-    setHandoffMsg(msg);
-    setHandoffNext(() => next);
-    setPhase("handoff");
+  // ── Shared status bar ───────────────────────────────────────────────────────
+  function StatusBar({ left, right }) {
+    return (
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 8 }}>
+        <div className="muted pixel" style={{ fontSize: 8 }}>{left}</div>
+        {right}
+      </div>
+    );
   }
 
-  function handlePlaceClick(r, c) {
-    if (!currentShip || !canPlace(boards[turn], r, c, currentShip.size, dir)) return;
-    const newBoard  = doPlace(boards[turn], r, c, currentShip.size, dir, currentShip.name);
-    const newBoards = { ...boards, [turn]: newBoard };
-    setBoards(newBoards);
+  // ── Screens ─────────────────────────────────────────────────────────────────
 
-    if (shipIdx + 1 < SHIPS.length) {
-      setShipIdx(shipIdx + 1);
-    } else {
-      // WS_WIRE: emitShipsPlaced({ playerId: turn, board: newBoard })
-      if (turn === 1) {
-        goHandoff("P1 FLEET DEPLOYED — PASS TO PLAYER 2", () => {
-          setTurn(2); setShipIdx(0); setDir("H"); setHover(null); setPhase("place");
-        });
-      } else {
-        goHandoff("ALL FLEETS DEPLOYED — PLAYER 1 FIRES FIRST", () => {
-          setTurn(1); setPhase("battle");
-        });
-      }
-    }
-  }
+  if (phase === "lobby") return (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 24, minHeight: 360 }}>
+      <div className="pixel-title" style={{ fontSize: 16 }}>BATTLESHIP ONLINE</div>
+      {error && <div className="pixel" style={{ fontSize: 8, color: "var(--pink)" }}>⚠ {error}</div>}
 
-  function handleFireClick(r, c) {
-    if (shots[turn][r][c].fired) return;
+      <button className="btn primary" style={{ width: 220 }} onClick={createRoom}>
+        CREATE GAME
+      </button>
 
-    const hit = !!boards[opponent][r][c].ship;
-    const newShots = {
-      ...shots,
-      [turn]: shots[turn].map((row, ri) =>
-        row.map((cell, ci) => ri === r && ci === c ? { fired: true, hit } : cell)
-      ),
-    };
-    setShots(newShots);
-
-    // WS_WIRE: emitFire({ playerId: turn, row: r, col: c })
-    // WS_WIRE: Server responds with "game_state" — replace local logic below with onGameState handler
-
-    if (allSunk(boards[opponent], newShots[turn])) {
-      setWinner(turn);
-      setPhase("gameover");
-      onGameOver?.(turn);
-      // WS_WIRE: onGameOver handler fires here instead
-      return;
-    }
-
-    const result = hit ? "💥 HIT!" : "MISS";
-    setLastResult(result);
-    goHandoff(`${result} — PASS TO PLAYER ${opponent}`, () => {
-      setTurn(opponent); setLastResult(null); setPhase("battle");
-    });
-  }
-
-  function reset() {
-    setPhase("place"); setTurn(1);
-    setBoards({ 1: emptyBoard(), 2: emptyBoard() });
-    setShots({ 1: emptyShots(), 2: emptyShots() });
-    setShipIdx(0); setDir("H"); setHover(null); setWinner(null); setLastResult(null);
-  }
-
-  // ── Screens ───────────────────────────────────────────────────────────────
-
-  if (phase === "handoff") return (
-    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 20, minHeight: 400 }}>
-      <div className="pixel" style={{ fontSize: 9, color: "var(--pink)", letterSpacing: "0.12em" }}>⚠ COVER THE SCREEN — PASS DEVICE ⚠</div>
-      <div className="pixel-title" style={{ fontSize: 14, textAlign: "center", maxWidth: 500, lineHeight: 2 }}>{handoffMsg}</div>
-      <button className="btn primary" style={{ marginTop: 16 }} onClick={handoffNext}>READY →</button>
-      <div className="muted pixel" style={{ fontSize: 8 }}>or press ENTER</div>
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
+        <div className="label">OR JOIN WITH CODE</div>
+        <div style={{ display: "flex", gap: 8 }}>
+          <input
+            className="input"
+            placeholder="ENTER CODE"
+            value={inputCode}
+            maxLength={4}
+            onChange={e => setInputCode(e.target.value.toUpperCase())}
+            onKeyDown={e => e.key === "Enter" && joinRoom()}
+            style={{ width: 120, textAlign: "center", letterSpacing: "0.3em" }}
+          />
+          <button className="btn" onClick={joinRoom}>JOIN</button>
+        </div>
+      </div>
     </div>
   );
 
-  if (phase === "gameover") return (
-    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 16, minHeight: 400 }}>
-      <div className="pixel-title" style={{ fontSize: 28 }}>PLAYER {winner} WINS</div>
-      <div className="muted" style={{ fontSize: 16 }}>all enemy ships have been sunk</div>
-      <button className="btn primary" style={{ marginTop: 16 }} onClick={reset}>PLAY AGAIN</button>
+  if (phase === "waiting") return (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 20, minHeight: 360 }}>
+      <div className="pixel-title" style={{ fontSize: 16 }}>WAITING FOR OPPONENT</div>
+      <div className="muted pixel" style={{ fontSize: 9 }}>SHARE THIS CODE WITH YOUR OPPONENT</div>
+      <div className="pixel-title" style={{ fontSize: 36, color: "var(--phos)", letterSpacing: "0.3em" }}>{roomCode}</div>
+      <div className="muted pixel" style={{ fontSize: 8 }}>WAITING<span className="blink">...</span></div>
+      <button className="btn ghost" onClick={backToLobby}>CANCEL</button>
     </div>
   );
 
-  if (phase === "place") return (
-    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 14, padding: "8px 0" }}>
-      {/* Header */}
+  if (phase === "placement") return (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12, padding: "8px 0" }}>
       <div style={{ display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap", justifyContent: "center" }}>
-        <div className="pixel" style={{ fontSize: 10, color: "#fff" }}>PLAYER {turn} — PLACE YOUR FLEET</div>
-        {currentShip && <>
-          <span className="pill pink">{currentShip.name} · SIZE {currentShip.size}</span>
+        <div className="pixel" style={{ fontSize: 10, color: "#fff" }}>PLACE YOUR FLEET</div>
+        {SHIPS[shipIdx] && <>
+          <span className="pill pink">{SHIPS[shipIdx].name} · SIZE {SHIPS[shipIdx].size}</span>
           <button className="btn ghost" style={{ padding: "4px 10px" }} onClick={() => setDir(d => d === "H" ? "V" : "H")}>
-            [{dir}] &nbsp;<span style={{ fontSize: 8 }}>R = ROTATE</span>
+            [{dir}] <span style={{ fontSize: 8 }}>R = ROTATE</span>
           </button>
         </>}
       </div>
-      {/* Grid */}
       <Grid
-        board={boards[turn]}
-        mode="place"
+        board={myBoard} mode="place"
         hoverCells={hoverCells}
         onCellClick={handlePlaceClick}
         onCellHover={(r, c) => setHover(r !== null ? { r, c } : null)}
       />
-      {/* Ship checklist */}
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "center" }}>
         {SHIPS.map((s, i) => (
           <span key={s.name} className={`pill${i < shipIdx ? " accent" : i === shipIdx ? " pink" : ""}`}>
@@ -301,37 +378,58 @@ export default function BattleshipGame({ onGameOver }) {
           </span>
         ))}
       </div>
-      <div className="muted pixel" style={{ fontSize: 8 }}>CLICK TO PLACE · R TO ROTATE</div>
+      <div className="muted pixel" style={{ fontSize: 8 }}>VS {opponentUsername} · CLICK TO PLACE · R TO ROTATE</div>
     </div>
   );
 
-  if (phase === "battle") {
-    const myShots    = shots[turn];
-    const enemyShots = shots[opponent];
+  if (phase === "waiting-ready") return (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 16, minHeight: 360 }}>
+      <div className="pixel-title" style={{ fontSize: 14 }}>FLEET DEPLOYED</div>
+      <div className="muted pixel" style={{ fontSize: 9 }}>WAITING FOR {opponentUsername} TO PLACE SHIPS<span className="blink">...</span></div>
+    </div>
+  );
 
-    return (
-      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 14, padding: "8px 0" }}>
-        {/* Turn + stats */}
-        <div style={{ display: "flex", gap: 20, alignItems: "center" }}>
-          <div className="pixel" style={{ fontSize: 10, color: "#fff" }}>PLAYER {turn} — FIRE!</div>
-          <span className="pill warn">{shipsRemaining(boards[opponent], myShots)} enemy ships left</span>
-          <span className="pill">{shipsRemaining(boards[turn], enemyShots)} your ships left</span>
-        </div>
-        {/* Boards */}
-        <div style={{ display: "flex", gap: 36, alignItems: "flex-start", flexWrap: "wrap", justifyContent: "center" }}>
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
-            <div className="label">YOUR FLEET</div>
-            <Grid board={boards[turn]} shots={enemyShots} mode="own" />
-          </div>
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
-            <div className="label">ENEMY WATERS — CLICK TO FIRE</div>
-            <Grid board={boards[opponent]} shots={myShots} mode="enemy" onCellClick={handleFireClick} />
-          </div>
-        </div>
-        <div className="muted pixel" style={{ fontSize: 8 }}>CLICK ENEMY WATERS TO FIRE</div>
+  if (phase === "playing") return (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12, padding: "8px 0" }}>
+      {/* Status row */}
+      <div style={{ display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap", justifyContent: "center" }}>
+        {disconnected
+          ? <span className="pill pink">⚠ OPPONENT DISCONNECTED — WAITING 60S</span>
+          : <span className={`pill${isMyTurn ? " accent" : ""}`}>{isMyTurn ? "▸ YOUR TURN — FIRE!" : `${opponentUsername}'S TURN`}</span>
+        }
+        {lastResult && <span className="pill pink">{lastResult}</span>}
       </div>
-    );
-  }
+
+      {/* Two grids */}
+      <div style={{ display: "flex", gap: 28, alignItems: "flex-start", flexWrap: "wrap", justifyContent: "center" }}>
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
+          <div className="label">YOUR FLEET</div>
+          <Grid board={myBoard} shots={opponentShots} mode="own" />
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
+          <div className="label">{isMyTurn ? "ENEMY WATERS — CLICK TO FIRE" : "ENEMY WATERS"}</div>
+          <Grid board={emptyBoard()} shots={myShots} mode="enemy" onCellClick={handleFireClick} disabled={!isMyTurn || disconnected} />
+        </div>
+      </div>
+      <div className="muted pixel" style={{ fontSize: 8 }}>ROOM {roomCode} · VS {opponentUsername}</div>
+    </div>
+  );
+
+  if (phase === "gameover") return (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 16, minHeight: 360 }}>
+      <div className="pixel-title" style={{ fontSize: 28, color: won ? "var(--phos)" : "var(--pink)" }}>
+        {won ? "VICTORY!" : "DEFEAT"}
+      </div>
+      <div className="muted pixel" style={{ fontSize: 9 }}>
+        {won ? "ALL ENEMY SHIPS SUNK" : `${opponentUsername} WINS`}
+      </div>
+      {opponentWantsRematch && <div className="pixel" style={{ fontSize: 9, color: "var(--phos)" }}>{opponentUsername} WANTS A REMATCH</div>}
+      <div style={{ display: "flex", gap: 10, marginTop: 8 }}>
+        <button className="btn primary" onClick={requestRematch}>REMATCH</button>
+        <button className="btn ghost"   onClick={backToLobby}>BACK TO LOBBY</button>
+      </div>
+    </div>
+  );
 
   return null;
 }
