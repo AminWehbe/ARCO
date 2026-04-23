@@ -20,7 +20,7 @@ resource "local_file" "private_key" {
 # Security group — SSH for management, port 3000 for CloudFront → EC2 traffic
 resource "aws_security_group" "ec2" {
   name        = "${var.project}-ec2-sg"
-  description = "ARCO EC2 — SSH (22) and app (3000)"
+  description = "ARCO EC2 - SSH (22) and app (3000)"
 
   ingress {
     description = "SSH"

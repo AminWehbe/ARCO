@@ -2,7 +2,7 @@ locals {
   # AWS managed cache/origin-request policy IDs (no need to create custom ones)
   cache_disabled_id         = "4135ea2d-6df8-44a3-9df3-4b5a84be39ad" # CachingDisabled
   cache_optimized_id        = "658327ea-f89d-4fab-a63d-7e88639e58f6" # CachingOptimized
-  all_viewer_policy_id      = "216adef6-5edf-4b71-9614-a15a26e67f6f" # AllViewer (forwards all headers incl. Authorization)
+  all_viewer_policy_id      = "216adef6-5c7f-47e4-b989-5492eafa07d3" # AllViewer (forwards all headers incl. Authorization)
   all_viewer_except_host_id = "b689b0a8-53d0-40ab-baf2-68738e2966ac" # AllViewerExceptHostHeader (safe for S3)
 }
 
