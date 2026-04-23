@@ -1,6 +1,6 @@
 # ARCO — Retro Arcade
 
-A retro-styled arcade web app with 4 games, AWS-backed auth, leaderboards, and user profiles.
+A retro CRT-styled arcade web app with 4 games, real-time online multiplayer, AWS-backed auth, leaderboards, and user profiles.
 
 **Live:** https://dmlg1bi4iczn7.cloudfront.net
 
@@ -8,22 +8,26 @@ A retro-styled arcade web app with 4 games, AWS-backed auth, leaderboards, and u
 
 ## Games
 
-| Game | Players |
+| Game | Mode |
 |---|---|
-| Snake | 1P |
-| Flappy Bird | 1P |
-| Memory | 1P |
-| Battleship | Local 2P |
+| Snake | 1 Player |
+| Flappy Bird | 1 Player |
+| Memory | 1 Player |
+| Battleship | Online Multiplayer (socket.io) |
 
 ---
 
 ## Tech Stack
 
-- **Frontend** — React + Vite, deployed on S3 + CloudFront
-- **Backend** — Node.js + Express on AWS EC2 (t3.micro, eu-west-1)
-- **Auth** — AWS Cognito (email + username, JWT)
-- **Database** — AWS DynamoDB (users + scores tables)
-- **CDN** — CloudFront with path-based routing to EC2 for API calls
+| Layer | Tech |
+|---|---|
+| Frontend | React + Vite, custom CSS (CRT/arcade aesthetic) |
+| Backend | Node.js + Express + socket.io on AWS EC2 (t3.micro, eu-west-1) |
+| Auth | AWS Cognito — email + username, JWT verification |
+| Database | AWS DynamoDB — `arco-users` + `arco-scores` (on-demand) |
+| Hosting | S3 (frontend build) + CloudFront (CDN + API routing) |
+| Process manager | PM2 on EC2 |
+| IaC | Terraform — full infrastructure as code |
 
 ---
 
@@ -32,32 +36,78 @@ A retro-styled arcade web app with 4 games, AWS-backed auth, leaderboards, and u
 ```
 arco/
 ├── src/
-│   ├── api/client.js          # All API calls
-│   ├── context/AppContext.jsx # Global state + auth logic
-│   ├── screens/               # Landing, Library, InGame, Leaderboard, Profile
-│   └── games/                 # snake, flappy, memory, battleship
+│   ├── api/client.js           # All API calls to backend
+│   ├── config/admins.js        # Admin user IDs (frontend gate)
+│   ├── context/AppContext.jsx  # Global state + auth logic
+│   ├── screens/                # Landing, Library, InGame, Leaderboard, Profile, Admin, Settings
+│   └── games/                  # snake, flappy, memory, battleship
 ├── server/
-│   ├── index.js               # Express entry point
-│   ├── middleware/auth.js     # JWT verification
-│   ├── routes/                # auth, scores, users
-│   └── db/dynamo.js           # DynamoDB client
-├── .env.example               # Frontend env template
-└── server/.env.example        # Backend env template
+│   ├── index.js                # Express entry + socket.io attach
+│   ├── socket.js               # Battleship WebSocket event handlers
+│   ├── game.js                 # Pure Battleship logic
+│   ├── rooms.js                # In-memory room store
+│   ├── middleware/auth.js      # Cognito JWT verification
+│   ├── routes/                 # auth, scores, users, admin, stats
+│   └── db/dynamo.js            # DynamoDB DocumentClient
+├── terraform/                  # Full AWS infrastructure as code
+│   ├── main.tf
+│   ├── ec2.tf / s3.tf / cloudfront.tf / dynamodb.tf / cognito.tf / iam.tf
+│   ├── deploy.tf               # Auto-builds + deploys frontend on apply
+│   ├── userdata.sh             # EC2 bootstrap script
+│   └── outputs.tf
+└── .env.example
 ```
 
 ---
 
-## Local Setup
+## Deploy Everything with Terraform (Recommended)
+
+Spins up the full stack on a fresh AWS account with a single command.
 
 ### Prerequisites
-- Node.js 18+
-- AWS account with Cognito User Pool + DynamoDB tables created (see below)
+- [Terraform](https://developer.hashicorp.com/terraform/install) installed
+- [AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html) configured
+- Node.js 18+ and npm installed (for the frontend build step)
+
+### Steps
+
+```bash
+git clone https://github.com/amine-wehbe/ARCO.git
+cd ARCO/arco
+
+aws configure   # enter your AWS credentials + region: eu-west-1
+
+cd terraform
+terraform init
+terraform apply # type "yes" — takes ~15–20 min (CloudFront deployment)
+```
+
+After apply, the terminal prints:
+
+```
+app_url                  = "https://xxxxxxxxxxxx.cloudfront.net"
+ssh_command              = "ssh -i terraform/arco-key.pem ec2-user@x.x.x.x"
+cognito_user_pool_id     = "eu-west-1_xxxxxxx"
+cognito_client_id        = "xxxxxxxxxxxxxxxx"
+```
+
+> **Note:** Wait ~3 minutes after `terraform apply` finishes before testing. The EC2 user_data script (Node install + git clone + PM2 start) runs in the background after the instance is reported as running.
+
+### Tear down
+
+```bash
+terraform destroy   # deletes all AWS resources created above
+```
+
+---
+
+## Local Development
 
 ### Frontend
 
 ```bash
 cp .env.example .env
-# Edit .env: set VITE_API_BASE_URL=http://localhost:3000 for local dev
+# Set VITE_API_BASE_URL=http://localhost:3000
 npm install
 npm run dev
 # → http://localhost:5173
@@ -67,155 +117,143 @@ npm run dev
 
 ```bash
 cd server
-cp .env.example .env
-# Edit .env with your Cognito and AWS values (see below)
 npm install
-npm run dev
-# → http://localhost:3000
 ```
 
-**server/.env values:**
+Create `server/.env`:
 
 ```
 PORT=3000
 AWS_REGION=eu-west-1
 COGNITO_USER_POOL_ID=<your-user-pool-id>
 COGNITO_CLIENT_ID=<your-app-client-id>
+ALLOWED_ORIGIN=http://localhost:5173
 ```
 
-> Remove `DYNAMO_ENDPOINT` line for real DynamoDB (keep it only for local DynamoDB emulator).
+```bash
+node index.js
+# → http://localhost:3000
+```
 
 ---
 
-## AWS Setup (from scratch)
+## Manual AWS Setup (without Terraform)
 
 ### 1. Cognito User Pool
-
-1. AWS Console → Cognito → Create User Pool
-2. Sign-in: **Email**
-3. Required attributes: `email`, `preferred_username`
-4. App client type: **Single Page Application (SPA)**
-5. Auth flow: enable `ALLOW_USER_PASSWORD_AUTH`
-6. Copy User Pool ID and App Client ID → paste into `server/.env`
+- Sign-in: **Email**
+- Required attributes: `email`, `preferred_username`
+- App client: **SPA**, auth flow: `ALLOW_USER_PASSWORD_AUTH`
 
 ### 2. DynamoDB Tables
 
-**arco-users**
-```
-Table name: arco-users
-Partition key: userId (String)
-Billing: On-demand
-```
+**arco-users** — `userId` (PK, String), billing: On-demand
 
-**arco-scores**
-```
-Table name: arco-scores
-Partition key: gameId (String)
-Sort key: sk (String)
-Billing: On-demand
+**arco-scores** — `gameId` (PK, String), `sk` (SK, String), billing: On-demand
+- GSI: `gameId-score-index` — PK: `gameId`, SK: `score` (Number)
 
-GSI:
-  Index name: gameId-score-index
-  Partition key: gameId (String)
-  Sort key: score (Number)
-```
+### 3. IAM Role
+Create `arco-ec2-role` with `AmazonDynamoDBFullAccess` + `AmazonCognitoPowerUser`. Attach to EC2.
 
-### 3. IAM Role (for EC2)
-
-Create role `arco-ec2-role` with:
-- `AmazonDynamoDBFullAccess`
-- `AmazonCognitoPowerUser`
-
-Attach to EC2 instance.
-
-### 4. EC2 Backend
+### 4. EC2 (Amazon Linux 2, t3.micro)
 
 ```bash
-# On the EC2 instance (Amazon Linux 2023, t3.micro)
-sudo dnf install -y nodejs npm
-sudo npm install -g pm2
-
-# Upload server/ folder (from your machine)
-scp -i ~/.ssh/arco-key.pem -r server/ ec2-user@<EC2-IP>:~/
-
-# On EC2
-cd ~/server
-cp .env.example .env    # fill in values
+curl -fsSL https://rpm.nodesource.com/setup_18.x | bash -
+yum install -y nodejs git
+npm install -g pm2
+git clone https://github.com/amine-wehbe/ARCO.git
+cd ARCO/arco/server
 npm install
+# create .env with Cognito values
 pm2 start index.js --name arco-server
-pm2 save
-pm2 startup            # follow the printed command to auto-start on reboot
+pm2 save && pm2 startup
 ```
 
-### 5. Frontend Deploy
+### 5. CloudFront Behaviors (in order)
 
-```bash
-# In project root
-npm run build
+| Path | Origin |
+|---|---|
+| `/socket.io*` | EC2 port 3000 — allow-all protocol (WebSocket) |
+| `/auth*` | EC2 port 3000 |
+| `/scores*` | EC2 port 3000 |
+| `/users*` | EC2 port 3000 |
+| `/admin*` | EC2 port 3000 |
+| `/stats*` | EC2 port 3000 |
+| `/health` | EC2 port 3000 |
+| `/*` (default) | S3 website endpoint |
 
-# Push dist/ to S3
-aws s3 sync dist/ s3://<your-bucket-name> --delete
-```
-
-### 6. CloudFront
-
-Create distribution:
-- **Origin 1** — S3 bucket (default)
-- **Origin 2** — `<EC2-IP>.nip.io` port 3000 (HTTP)
-
-Add behaviors (in order):
-- `/auth*` → EC2 origin
-- `/scores*` → EC2 origin
-- `/users*` → EC2 origin
-- `/health` → EC2 origin
-- `/*` (default) → S3 origin
-
-After any config change, create a CloudFront invalidation: `/*`
+> CloudFront rejects raw IPs as origin — use `<EC2-ELASTIC-IP>.nip.io` as the EC2 origin domain.
 
 ---
 
 ## API Reference
 
-Base URL is the CloudFront domain (or `http://localhost:3000` locally).
+Base URL: CloudFront domain (or `http://localhost:3000` locally).
 
 ### Auth
 ```
 POST /auth/signup    { email, password, username }
 POST /auth/confirm   { email, code }
-POST /auth/login     { email, password }  → { token }
-POST /auth/logout    (Bearer token)
+POST /auth/login     { email, password }  → { token, userId }
+POST /auth/logout    Bearer
 ```
 
 ### Scores
 ```
-POST /scores         (Bearer) { gameId, score }
-GET  /scores/:gameId          → { leaderboard: [...] }
+POST /scores         Bearer  { gameId, score }
+GET  /scores/:gameId         → { leaderboard: [...] }
 ```
-Valid gameIds: `snake`, `flappy`, `memory`, `battleship`
+Valid `gameId` values: `snake`, `flappy`, `memory`, `battleship`
 
 ### Users
 ```
-POST  /users         (Bearer) { username }
-GET   /users/:id     (Bearer) → user object
-PATCH /users/:id     (Bearer) { username?, avatar? }
+POST  /users         Bearer  { username }
+GET   /users/:id     Bearer  → { userId, username, avatar, gamesPlayed, best_* }
+PATCH /users/:id     Bearer  { username?, avatar? }
+```
+
+### Admin
+```
+GET /admin/stats     Bearer + admin ID → { totalUsers, games: [...] }
+```
+
+### Public
+```
+GET /stats           → { totalUsers, globalHi }
+GET /health          → { status: "ok" }
 ```
 
 ---
 
-## Restarting the EC2 Instance
+## Battleship Multiplayer
 
-If the instance was stopped (e.g. to save costs):
+Powered by socket.io on the same EC2 port (3000), routed through CloudFront via the `/socket.io*` behavior.
 
-1. AWS Console → EC2 → Instances → select → **Start instance**
-2. Wait ~30s for boot
-3. SSH in: `ssh -i ~/.ssh/arco-key.pem ec2-user@54.195.242.3`
-4. Check server: `pm2 status`
-5. If stopped: `pm2 restart arco-server`
-6. Verify: `curl http://localhost:3000/health`
+- Create a room → get a 4-character code
+- Share code with opponent → they join
+- Place ships → both confirm → game starts
+- 60-second reconnect grace period on browser refresh
 
-The Elastic IP (54.195.242.3) stays the same across stop/start, so CloudFront doesn't need to be updated.
+---
+
+## Restarting EC2 After Stop
+
+```bash
+# SSH in
+ssh -i ~/.ssh/arco-key.pem ec2-user@54.195.242.3
+
+# Check server status
+pm2 status
+
+# Restart if needed
+pm2 restart arco-server
+
+# Verify
+curl http://localhost:3000/health
+```
+
+The Elastic IP stays the same across stop/start — CloudFront needs no update.
 
 ---
 
 ## Team
-- AUB CS Final Year Project
+AUB CS Final Year Project — 2025/2026
